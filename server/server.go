@@ -14,41 +14,50 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
+	"strings"
 	"sync"
 
 	"github.com/pingcap/tiup/pkg/repository/v1manifest"
+	"github.com/pingcap/tiup/server/model"
+	"github.com/pingcap/tiup/server/pkg"
 	"github.com/pingcap/tiup/server/session"
 	"github.com/pingcap/tiup/server/store"
 )
 
+const Owner = "pingcap"
+
 type server struct {
-	root     string
-	upstream string
-	keys     map[string]*v1manifest.KeyInfo
-	sm       session.Manager
+	root          string
+	upstream      string
+	upstreamCache *pkg.UpstreamCache
+	keys          map[string]*v1manifest.KeyInfo
+	sm            session.Manager
 }
 
 // NewServer returns a pointer to server
-func newServer(rootDir, upstream, indexKey, snapshotKey, timestampKey string) (*server, error) {
+func newServer(rootDir, upstream, upstreamHome, indexKey, snapshotKey, timestampKey, ownerKey string) (*server, error) {
+	upstreamHome = strings.TrimSuffix(upstreamHome, "/")
+	upstreamCache := pkg.NewUpstreamCache(upstreamHome)
+
 	s := &server{
-		root:     rootDir,
-		upstream: upstream,
-		keys:     make(map[string]*v1manifest.KeyInfo),
-		sm:       session.New(store.NewStore(rootDir, upstream), new(sync.Map)),
+		root:          rootDir,
+		upstream:      upstream,
+		upstreamCache: upstreamCache,
+		keys:          make(map[string]*v1manifest.KeyInfo),
+		sm:            session.New(store.NewStore(rootDir, upstream), new(sync.Map)),
 	}
 
 	kmap := map[string]string{
 		v1manifest.ManifestTypeIndex:     indexKey,
 		v1manifest.ManifestTypeSnapshot:  snapshotKey,
 		v1manifest.ManifestTypeTimestamp: timestampKey,
+		Owner:                            ownerKey,
 	}
 
 	for ty, kfile := range kmap {
-		k, err := loadPrivateKey(kfile)
+		k, err := model.LoadPrivateKey(kfile)
 		if err != nil {
 			return nil, err
 		}
@@ -61,24 +70,4 @@ func newServer(rootDir, upstream, indexKey, snapshotKey, timestampKey string) (*
 func (s *server) run(addr string) error {
 	fmt.Println(addr)
 	return http.ListenAndServe(addr, s.router())
-}
-
-func loadPrivateKey(keyFile string) (*v1manifest.KeyInfo, error) {
-	var key v1manifest.KeyInfo
-	f, err := os.Open(keyFile)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	if err := json.NewDecoder(f).Decode(&key); err != nil {
-		return nil, err
-	}
-
-	// Check if key is valid
-	_, err = key.ID()
-	if err != nil {
-		return nil, err
-	}
-
-	return &key, nil
 }

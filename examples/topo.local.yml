@@ -100,7 +100,7 @@ tidb_servers:
 tikv_servers:
   - host: 172.16.4.65
     # ssh_port: 22
-    port: 40160
+    port: 40016
     status_port: 40180
     # deploy_dir: "/tidb-deploy/tikv-20160"
     # data_dir: "/tidb-data/tikv-20160"
@@ -116,12 +116,12 @@ tikv_servers:
 tiflash_servers:
   - host: 172.16.4.65
     # ssh_port: 22
-    # tcp_port: 9000
-    # http_port: 8123
-    # flash_service_port: 3930
-    # flash_proxy_port: 20170
-    # flash_proxy_status_port: 20292
-    # metrics_port: 8234
+    tcp_port: 29000
+    http_port: 28123
+    flash_service_port: 23930
+    flash_proxy_port: 40170
+    flash_proxy_status_port: 40292
+    metrics_port: 28234
     # deploy_dir: /tidb-deploy/tiflash-9000
     # data_dir: /tidb-data/tiflash-9000
     # log_dir: /tidb-deploy/tiflash-9000/log
@@ -189,7 +189,7 @@ drainer_servers:
     #     # The following configs are used to overwrite the `server_configs.drainer` values.
     config:
       syncer.db-type: "file"
-#       syncer.to.host: "127.0.0.1"
+#       syncer.to.host: "172.16.4.65"
 #       syncer.to.user: "root"
 #       syncer.to.password: ""
 #       syncer.to.port: 3306
@@ -210,18 +210,18 @@ cdc_servers:
 #   - host: 172.16.4.65
 #   - host: 172.16.4.65
 
-# monitoring_servers:
-#   - host: 172.16.4.65
-#     # ssh_port: 22
-#     port: 29090
-#     # deploy_dir: "/tidb-deploy/prometheus-8249"
-#     # data_dir: "/tidb-data/prometheus-8249"
-#     # log_dir: "/tidb-deploy/prometheus-8249/log"
+monitoring_servers:
+  - host: 172.16.4.65
+    # ssh_port: 22
+    port: 29090
+    # deploy_dir: "/tidb-deploy/prometheus-8249"
+    # data_dir: "/tidb-data/prometheus-8249"
+    # log_dir: "/tidb-deploy/prometheus-8249/log"
 
-# grafana_servers:
-#   - host: 172.16.4.65
-#     port: 23000
-#     # deploy_dir: /tidb-deploy/grafana-3000
+grafana_servers:
+  - host: 172.16.4.65
+    port: 23000
+    # deploy_dir: /tidb-deploy/grafana-3000
 
 alertmanager_servers:
   - host: 172.16.4.65

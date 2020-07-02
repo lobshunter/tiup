@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiup/pkg/logger/log"
 	"github.com/spf13/cobra"
 )
@@ -27,6 +28,8 @@ func main() {
 	indexKey := ""
 	snapshotKey := ""
 	timestampKey := ""
+	tiupHome := ""
+	ownerKey := ""
 
 	cmd := &cobra.Command{
 		Use:   fmt.Sprintf("%s <root-dir>", os.Args[0]),
@@ -36,23 +39,35 @@ func main() {
 				return cmd.Help()
 			}
 
-			s, err := newServer(args[0], upstream, indexKey, snapshotKey, timestampKey)
+			s, err := newServer(args[0], upstream, tiupHome, indexKey, snapshotKey, timestampKey, ownerKey)
 			if err != nil {
 				return err
+			}
+
+			err = s.mergeUpstream()
+			if err != nil {
+				// return err
+				fmt.Println(errors.ErrorStack(err))
+				os.Exit(1)
 			}
 
 			return s.run(addr)
 		},
 	}
+
+	cmd.Flags().StringVarP(&ownerKey, "owner", "", "", "specific the private key for owner")
+	cmd.Flags().StringVarP(&tiupHome, "tiuphome", "", tiupHome, "set default tiup home")
 	cmd.Flags().StringVarP(&addr, "addr", "", addr, "addr to listen")
 	cmd.Flags().StringVarP(&indexKey, "index", "", "", "specific the private key for index")
 	cmd.Flags().StringVarP(&snapshotKey, "snapshot", "", "", "specific the private key for snapshot")
 	cmd.Flags().StringVarP(&timestampKey, "timestamp", "", "", "specific the private key for timestamp")
 	cmd.Flags().StringVarP(&upstream, "upstream", "", upstream, "specific the upstream mirror")
 
+	_ = cmd.MarkFlagRequired("owner")
 	_ = cmd.MarkFlagRequired("index")
 	_ = cmd.MarkFlagRequired("snapshot")
 	_ = cmd.MarkFlagRequired("timestamp")
+	_ = cmd.MarkFlagRequired("tiuphome")
 
 	if err := cmd.Execute(); err != nil {
 		log.Errorf("Execute command: %s", err.Error())

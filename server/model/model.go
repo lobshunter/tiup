@@ -14,7 +14,9 @@
 package model
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	cjson "github.com/gibson042/canonicaljson-go"
@@ -25,6 +27,26 @@ import (
 	"github.com/pingcap/tiup/server/store"
 )
 
+func LoadPrivateKey(keyFile string) (*v1manifest.KeyInfo, error) {
+	var key v1manifest.KeyInfo
+	f, err := os.Open(keyFile)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	if err := json.NewDecoder(f).Decode(&key); err != nil {
+		return nil, err
+	}
+
+	// Check if key is valid
+	_, err = key.ID()
+	if err != nil {
+		return nil, err
+	}
+
+	return &key, nil
+}
+
 // Model defines operations on the manifests
 type Model interface {
 	UpdateComponentManifest(component string, manifest *ComponentManifest) error
@@ -32,6 +54,8 @@ type Model interface {
 	UpdateIndexManifest(time.Time, func(*IndexManifest) *IndexManifest) error
 	UpdateSnapshotManifest(time.Time, func(*SnapshotManifest) *SnapshotManifest) error
 	UpdateTimestampManifest(time.Time) error
+	ReadComponentManifest(component string) (*ComponentManifest, error)
+	ReadIndexManifest() (*IndexManifest, error)
 }
 
 type model struct {
@@ -86,7 +110,7 @@ func (m *model) UpdateIndexManifest(initTime time.Time, f func(*IndexManifest) *
 	manifest := f(&last)
 	manifest.Signed.Version = last.Signed.Version + 1
 	v1manifest.RenewManifest(&manifest.Signed, initTime)
-	manifest.Signatures, err = sign(manifest.Signed, m.keys[v1manifest.ManifestTypeIndex])
+	manifest.Signatures, err = Sign(manifest.Signed, m.keys[v1manifest.ManifestTypeIndex])
 	if err != nil {
 		return err
 	}
@@ -102,12 +126,42 @@ func (m *model) UpdateSnapshotManifest(initTime time.Time, f func(*SnapshotManif
 	}
 	manifest := f(&last)
 	v1manifest.RenewManifest(&manifest.Signed, initTime)
-	manifest.Signatures, err = sign(manifest.Signed, m.keys[v1manifest.ManifestTypeSnapshot])
+	manifest.Signatures, err = Sign(manifest.Signed, m.keys[v1manifest.ManifestTypeSnapshot])
 	if err != nil {
 		return err
 	}
 
 	return m.txn.WriteManifest(v1manifest.ManifestFilenameSnapshot, manifest)
+}
+
+func (m *model) ReadComponentManifest(component string) (*ComponentManifest, error) {
+	snap, err := m.ReadSnapshotManifest()
+	if err != nil {
+		return nil, err
+	}
+
+	lastVersion := snap.Signed.Meta["/"+component+".json"].Version
+	var last ComponentManifest
+	if err := m.txn.ReadManifest(fmt.Sprintf("%d.%s.json", lastVersion, component), &last); err != nil {
+		return nil, err
+	}
+
+	return &last, nil
+}
+
+func (m *model) ReadIndexManifest() (*IndexManifest, error) {
+	snap, err := m.ReadSnapshotManifest()
+	if err != nil {
+		return nil, err
+	}
+	lastVersion := snap.Signed.Meta[v1manifest.ManifestURLIndex].Version
+
+	var last IndexManifest
+	if err := m.txn.ReadManifest(fmt.Sprintf("%d.index.json", lastVersion), &last); err != nil {
+		return nil, err
+	}
+
+	return &last, nil
 }
 
 // ReadSnapshotManifest returns snapshot.json
@@ -157,7 +211,7 @@ func (m *model) UpdateTimestampManifest(initTime time.Time) error {
 		Length: uint(fi.Size()),
 	}
 	v1manifest.RenewManifest(&manifest.Signed, initTime)
-	manifest.Signatures, err = sign(manifest.Signed, m.keys[v1manifest.ManifestTypeTimestamp])
+	manifest.Signatures, err = Sign(manifest.Signed, m.keys[v1manifest.ManifestTypeTimestamp])
 	if err != nil {
 		return err
 	}
@@ -165,7 +219,7 @@ func (m *model) UpdateTimestampManifest(initTime time.Time) error {
 	return m.txn.WriteManifest(v1manifest.ManifestFilenameTimestamp, &manifest)
 }
 
-func sign(signed interface{}, keys ...*v1manifest.KeyInfo) ([]v1manifest.Signature, error) {
+func Sign(signed interface{}, keys ...*v1manifest.KeyInfo) ([]v1manifest.Signature, error) {
 	payload, err := cjson.Marshal(signed)
 	if err != nil {
 		return nil, err

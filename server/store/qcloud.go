@@ -143,6 +143,26 @@ func (t *qcloudTxn) WriteManifest(filename string, manifest interface{}) error {
 	return nil
 }
 
+func (t *qcloudTxn) ReadLocalManifest(filename string, manifest interface{}) error {
+	t.access(filename)
+	filepath := t.store.path(filename)
+	if utils.IsExist(path.Join(t.root, filename)) {
+		filepath = path.Join(t.root, filename)
+	}
+	var wc io.ReadCloser
+	var err error
+	if wc, err = os.Open(filepath); err != nil {
+		return err
+	}
+	defer wc.Close()
+	bytes, err := ioutil.ReadAll(wc)
+	if err != nil {
+		return err
+	}
+
+	return cjson.Unmarshal(bytes, manifest)
+}
+
 func (t *qcloudTxn) ReadManifest(filename string, manifest interface{}) error {
 	t.access(filename)
 	filepath := t.store.path(filename)
@@ -226,11 +246,14 @@ func (t *qcloudTxn) Commit() error {
 		return err
 	}
 
-	at := time.Now()
 	for _, f := range files {
 		if err := utils.Copy(path.Join(t.root, f.Name()), t.store.path(f.Name())); err != nil {
 			return err
 		}
+	}
+
+	at := time.Now()
+	for _, f := range files {
 		t.store.modify(f.Name(), &at)
 	}
 

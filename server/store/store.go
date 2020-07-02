@@ -29,6 +29,7 @@ type FsTxn interface {
 	Read(filename string) (io.ReadCloser, error)
 	WriteManifest(filename string, manifest interface{}) error
 	ReadManifest(filename string, manifest interface{}) error
+	ReadLocalManifest(filename string, manifest interface{}) error
 	Stat(filename string) (os.FileInfo, error)
 	// Restart should reset the manifest state
 	ResetManifest() error

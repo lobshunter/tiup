@@ -1,0 +1,5 @@
+.vscode
+*.json
+__debug_bin
+note.md
+tools/tools
