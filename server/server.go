@@ -26,8 +26,6 @@ import (
 	"github.com/pingcap/tiup/server/store"
 )
 
-const Owner = "pingcap"
-
 type server struct {
 	root          string
 	upstream      string
@@ -53,7 +51,7 @@ func newServer(rootDir, upstream, upstreamHome, indexKey, snapshotKey, timestamp
 		v1manifest.ManifestTypeIndex:     indexKey,
 		v1manifest.ManifestTypeSnapshot:  snapshotKey,
 		v1manifest.ManifestTypeTimestamp: timestampKey,
-		Owner:                            ownerKey,
+		model.Owner:                      ownerKey,
 	}
 
 	for ty, kfile := range kmap {

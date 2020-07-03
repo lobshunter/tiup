@@ -10,9 +10,7 @@ import (
 
 const versionSuffix = "qa"
 
-// MergeComponent merge manifest from src to dst
-//
-// Typically, src is local manifest needs update, dst is updated upstream manifest
+// MergeComponent merge manifest and resign dst
 func MergeComponent(src, dst *model.ComponentManifest, keys ...*v1manifest.KeyInfo) error {
 	for platformName, platform := range src.Signed.Platforms {
 		if dst.Signed.Platforms[platformName] == nil {
@@ -36,13 +34,24 @@ func MergeComponent(src, dst *model.ComponentManifest, keys ...*v1manifest.KeyIn
 	return err
 }
 
-// MergeIndex will merge ComponentItem from src to dst
-//
-// Typically, src is local manifest needs update, dst is updated upstream manifest
+// MergeIndex merge manifest and resign dst
 func MergeIndex(src, dst *model.IndexManifest, keys ...*v1manifest.KeyInfo) error {
 	for compName, comp := range src.Signed.Components {
 		if _, ok := dst.Signed.Components[compName]; !ok {
 			dst.Signed.Components[compName] = comp
+		}
+	}
+
+	// merge owner info
+	for ownerId, ownerVal := range src.Signed.Owners {
+		if dstOwner, hasOwner := dst.Signed.Owners[ownerId]; hasOwner {
+			for keyId, keyVal := range ownerVal.Keys {
+				if _, hasKey := dstOwner.Keys[keyId]; !hasKey {
+					dst.Signed.Owners[ownerId].Keys[keyId] = keyVal
+				}
+			}
+		} else {
+			dst.Signed.Owners[ownerId] = ownerVal
 		}
 	}
 
@@ -54,8 +63,8 @@ func MergeIndex(src, dst *model.IndexManifest, keys ...*v1manifest.KeyInfo) erro
 	return err
 }
 
-//
-func MergeSnapshot(src, dst *model.SnapshotManifest, keys ...*v1manifest.KeyInfo) {
+// MergeSnapshot merge manifest and resign dst
+func MergeSnapshot(src, dst *model.SnapshotManifest, keys ...*v1manifest.KeyInfo) error {
 	for k, v := range src.Signed.Meta {
 		if _, ok := dst.Signed.Meta[k]; !ok {
 			dst.Signed.Meta[k] = v
@@ -63,6 +72,10 @@ func MergeSnapshot(src, dst *model.SnapshotManifest, keys ...*v1manifest.KeyInfo
 	}
 
 	v1manifest.RenewManifest(&dst.Signed, time.Now())
+
+	var err error
+	dst.Signatures, err = model.Sign(dst.Signed, keys...)
+	return err
 }
 
 func max(a, b uint) uint {

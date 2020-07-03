@@ -39,7 +39,7 @@ func (s *server) staticServer(local string, upstream string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// NOTE: hardcoding here, only call updateUpstream when downloading timestamp
 		if r.URL.Path == "timestamp.json" {
-			pkg.Log("----getting timestamp----")
+			pkg.Debug("----getting timestamp----")
 			err := s.mergeUpstream()
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
@@ -69,7 +69,7 @@ func (s *server) mergeUpstream() error {
 	}
 
 	if result.Updated {
-		pkg.Log("----upstream updated----")
+		pkg.Debug("----upstream updated----")
 		uuid := uuid.New().String()
 		err = s.sm.Begin(uuid)
 		if err != nil {
@@ -79,34 +79,44 @@ func (s *server) mergeUpstream() error {
 		txn := s.sm.Load(uuid)
 		md := model.New(txn, s.keys)
 
-		var localSnapshot model.SnapshotManifest
-		err = txn.ReadManifest(v1manifest.ManifestFilenameSnapshot, &localSnapshot)
-		if err != nil {
-			return errors.Trace(err)
-		}
-
 		// FIXME: retry for reason
 		{
+			// merge snapshot
+			var remoteSnapshot, localSnapshot model.SnapshotManifest
+
+			if err = cjson.Unmarshal(result.Changedfile[v1manifest.ManifestFilenameSnapshot], &remoteSnapshot); err != nil {
+				return errors.Trace(err)
+			}
+
+			if err = txn.ReadManifest(v1manifest.ManifestFilenameSnapshot, &localSnapshot); err != nil {
+				return errors.Trace(err)
+			}
+
+			if err = pkg.MergeSnapshot(&remoteSnapshot, &localSnapshot); err != nil {
+				return errors.Trace(err)
+			}
+
 			// merge index
 			var localIndex, remoteIndex model.IndexManifest
 			indexVersion := localSnapshot.Signed.Meta["/index.json"].Version
-			txn.ReadLocalManifest(fmt.Sprintf("%d.index.json", indexVersion), &localIndex)
-			err = cjson.Unmarshal(result.Changedfile[v1manifest.ManifestFilenameIndex], &remoteIndex)
+
+			if err = cjson.Unmarshal(result.Changedfile[v1manifest.ManifestFilenameIndex], &remoteIndex); err != nil {
+				return errors.Trace(err)
+			}
+
+			err = txn.ReadLocalManifest(fmt.Sprintf("%d.index.json", indexVersion), &localIndex)
 			if os.IsNotExist(err) {
-				// no local index
+				// no local index, no need to merge
 			} else if err != nil {
 				return errors.Trace(err)
 			} else {
-				err = pkg.MergeIndex(&localIndex, &remoteIndex)
+				err = pkg.MergeIndex(&localIndex, &remoteIndex, s.keys[v1manifest.ManifestTypeIndex])
 				if err != nil {
 					return errors.Trace(err)
 				}
 			}
 
-			v1manifest.RenewManifest(&remoteIndex.Signed, time.Now())
-			remoteIndex.Signatures, err = model.Sign(remoteIndex.Signed, s.keys[v1manifest.ManifestTypeIndex])
-			err = txn.WriteManifest(fmt.Sprintf("%d.index.json", indexVersion+1), &remoteIndex)
-			if err != nil {
+			if err = txn.WriteManifest(fmt.Sprintf("%d.index.json", indexVersion+1), &remoteIndex); err != nil {
 				return errors.Trace(err)
 			}
 
@@ -116,14 +126,6 @@ func (s *server) mergeUpstream() error {
 			}
 			localSnapshot.Signed.Meta["/"+v1manifest.ManifestFilenameIndex] = v1manifest.FileVersion{Version: indexVersion + 1, Length: uint(indexStat.Size())}
 
-			// merge snapshot
-			var remoteSnapshot model.SnapshotManifest
-			err = cjson.Unmarshal(result.Changedfile[v1manifest.ManifestFilenameSnapshot], &remoteSnapshot)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			pkg.MergeSnapshot(&remoteSnapshot, &localSnapshot)
-
 			// merge component manifest
 			delete(result.Changedfile, v1manifest.ManifestFilenameRoot)
 			delete(result.Changedfile, v1manifest.ManifestFilenameTimestamp)
@@ -131,24 +133,24 @@ func (s *server) mergeUpstream() error {
 			for fileName, content := range result.Changedfile {
 				var remoteComp, localComp model.ComponentManifest
 				compVersion := localSnapshot.Signed.Meta["/"+fileName].Version
-				err = txn.ReadManifest(fmt.Sprintf("%d.%s", compVersion, fileName), &localComp)
-				if os.IsNotExist(err) { // DEBUG: ???
-					continue
-				}
 
-				err = cjson.Unmarshal(content, &remoteComp)
-				if err != nil {
-					return errors.Trace(err)
-				}
-				err = pkg.MergeComponent(&localComp, &remoteComp)
-				if err != nil {
+				if err = cjson.Unmarshal(content, &remoteComp); err != nil {
 					return errors.Trace(err)
 				}
 
-				v1manifest.RenewManifest(&remoteComp.Signed, time.Now())
-				remoteComp.Signatures, err = model.Sign(remoteComp.Signed, s.keys[Owner])
-				err = txn.WriteManifest(fmt.Sprintf("%d.%s", compVersion+1, fileName), &remoteComp)
-				if err != nil {
+				err = txn.ReadLocalManifest(fmt.Sprintf("%d.%s", compVersion, fileName), &localComp)
+				if os.IsNotExist(err) {
+					// no need to merge
+				} else if err != nil {
+					return errors.Trace(err)
+				} else {
+					err = pkg.MergeComponent(&localComp, &remoteComp, s.keys[model.Owner])
+					if err != nil {
+						return errors.Trace(err)
+					}
+				}
+
+				if err = txn.WriteManifest(fmt.Sprintf("%d.%s", compVersion+1, fileName), &remoteComp); err != nil {
 					return errors.Trace(err)
 				}
 
@@ -162,12 +164,12 @@ func (s *server) mergeUpstream() error {
 			md.UpdateSnapshotManifest(time.Now(), func(*model.SnapshotManifest) *model.SnapshotManifest {
 				return &localSnapshot
 			})
-			err = md.UpdateTimestampManifest(time.Now())
-			if err != nil {
+
+			if err = md.UpdateTimestampManifest(time.Now()); err != nil {
 				return errors.Trace(err)
 			}
 
-			pkg.Log("----- commiting")
+			pkg.Debug("----- commiting")
 			return txn.Commit()
 		}
 	}

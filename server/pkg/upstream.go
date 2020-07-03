@@ -49,9 +49,9 @@ func (cache *UpstreamCache) UpdateUpstream() (updated UpdateUpstreamResult, err 
 	}
 	updated = result.(UpdateUpstreamResult)
 
-	Log("---- updated: %v", updated.Updated)
+	Debug("---- updated: %v", updated.Updated)
 	for filename := range updated.Changedfile {
-		Log("---file: %s\n", filename)
+		Debug("---file: %s\n", filename)
 	}
 	return updated, nil
 }
@@ -86,7 +86,7 @@ func (cache *UpstreamCache) updateUpstream() (updated interface{}, err error) {
 				return result, errors.Trace(err)
 			}
 
-			Log("changed %s\n", filepath.Base(event.Name))
+			Debug("changed %s\n", filepath.Base(event.Name))
 			result.Changedfile[filepath.Base(event.Name)] = data
 			result.Updated = true
 		default:
