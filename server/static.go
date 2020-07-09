@@ -40,11 +40,8 @@ func (s *server) staticServer(local string, upstream string) http.Handler {
 		// NOTE: hardcoding here, only call updateUpstream when downloading timestamp
 		if r.URL.Path == "timestamp.json" {
 			pkg.Debug("----getting timestamp----")
-			err := s.mergeUpstream()
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte(err.Error()))
-				return
+			if err := s.mergeUpstream(); err != nil {
+				log.Warnf("mergeUpstream error: %v", err)
 			}
 		}
 
@@ -62,7 +59,8 @@ func (s *server) staticServer(local string, upstream string) http.Handler {
 	})
 }
 
-func (s *server) mergeUpstream() error {
+// mergeUpstream merge upstream manifests update to local manifests
+func (s *server) mergeUpstream() (err error) {
 	result, err := s.upstreamCache.UpdateUpstream()
 	if err != nil {
 		return errors.Trace(err)
@@ -77,6 +75,12 @@ func (s *server) mergeUpstream() error {
 		}
 
 		txn := s.sm.Load(uuid)
+		defer func() {
+			if err != nil {
+				txn.Rollback()
+			}
+		}()
+
 		md := model.New(txn, s.keys)
 
 		// FIXME: retry for reason
@@ -92,7 +96,7 @@ func (s *server) mergeUpstream() error {
 				return errors.Trace(err)
 			}
 
-			if err = pkg.MergeSnapshot(&remoteSnapshot, &localSnapshot); err != nil {
+			if err = pkg.MergeSnapshot(&remoteSnapshot, &localSnapshot, s.keys[v1manifest.ManifestTypeSnapshot]); err != nil {
 				return errors.Trace(err)
 			}
 
@@ -110,7 +114,7 @@ func (s *server) mergeUpstream() error {
 			} else if err != nil {
 				return errors.Trace(err)
 			} else {
-				err = pkg.MergeIndex(&localIndex, &remoteIndex, s.keys[v1manifest.ManifestTypeIndex])
+				err = pkg.MergeIndex(indexVersion+1, &localIndex, &remoteIndex, s.keys[v1manifest.ManifestTypeIndex])
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -144,7 +148,7 @@ func (s *server) mergeUpstream() error {
 				} else if err != nil {
 					return errors.Trace(err)
 				} else {
-					err = pkg.MergeComponent(&localComp, &remoteComp, s.keys[model.Owner])
+					err = pkg.MergeComponent(compVersion+1, &localComp, &remoteComp, s.keys[model.Owner])
 					if err != nil {
 						return errors.Trace(err)
 					}

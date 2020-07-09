@@ -15,15 +15,20 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net/http"
+	"path"
 	"strings"
 	"sync"
 
+	cjson "github.com/gibson042/canonicaljson-go"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiup/pkg/repository/v1manifest"
 	"github.com/pingcap/tiup/server/model"
 	"github.com/pingcap/tiup/server/pkg"
 	"github.com/pingcap/tiup/server/session"
 	"github.com/pingcap/tiup/server/store"
+	tools "github.com/pingcap/tiup/server/tools/pkg"
 )
 
 type server struct {
@@ -35,7 +40,7 @@ type server struct {
 }
 
 // NewServer returns a pointer to server
-func newServer(rootDir, upstream, upstreamHome, indexKey, snapshotKey, timestampKey, ownerKey string) (*server, error) {
+func newServer(rootDir, upstream, upstreamHome, indexKey, snapshotKey, timestampKey, ownerKey, ownerPubKey string) (*server, error) {
 	upstreamHome = strings.TrimSuffix(upstreamHome, "/")
 	upstreamCache := pkg.NewUpstreamCache(upstreamHome)
 
@@ -62,7 +67,37 @@ func newServer(rootDir, upstream, upstreamHome, indexKey, snapshotKey, timestamp
 		s.keys[ty] = k
 	}
 
+	if err := s.mergeUpstream(); err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	if err := s.ensureOwnerKey("pingcap", ownerPubKey); err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	return s, nil
+}
+
+// ensureOwnerKey ensure the owner key is in index.json
+func (s *server) ensureOwnerKey(ownerId string, publicFile string) error {
+	timestampFile := path.Join(s.root, v1manifest.ManifestFilenameTimestamp)
+	snapshotFile := path.Join(s.root, v1manifest.ManifestFilenameSnapshot)
+
+	data, err := ioutil.ReadFile(snapshotFile)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	var snapshot model.SnapshotManifest
+	err = cjson.Unmarshal(data, &snapshot)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	indexVersion := snapshot.Signed.Meta[v1manifest.ManifestURLIndex].Version
+	indexFile := path.Join(s.root, fmt.Sprintf("%d.index.json", indexVersion))
+
+	return tools.AddOwnerKey(ownerId, publicFile, indexFile, snapshotFile, timestampFile, s.keys)
 }
 
 func (s *server) run(addr string) error {

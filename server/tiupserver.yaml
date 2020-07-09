@@ -1,34 +1,34 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: tiupserver
+  name: tiupserver-merge
   labels:
-    app: tiupserver
+    app: tiupserver-merge
 spec:
   ports:
     - protocol: TCP
-      nodePort: 31989
+      nodePort: 31988
       port: 8989
       targetPort: 8989
   type: NodePort
   selector:
-    app: tiupserver
+    app: tiupserver-merge
 
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: tiupserver
+  name: tiupserver-merge
 spec:
-  serviceName: "tiupserver"
+  serviceName: "tiupserver-merge"
   replicas: 1
   selector:
     matchLabels:
-      app: tiupserver
+      app: tiupserver-merge
   template:
     metadata:
       labels:
-        app: tiupserver
+        app: tiupserver-merge
     spec:
       containers:
         - name: tiupserver
@@ -37,8 +37,8 @@ spec:
           ports:
             - containerPort: 8989
           volumeMounts:
-            - name: mirror
-              mountPath: /home/tiupserver/mirror
+            - name: tiupserver
+              mountPath: /home/tiupserver
             - name: keys
               mountPath: /home/tiupserver/keys
             - name: private
@@ -49,10 +49,10 @@ spec:
             secretName: tiup-secret
         - name: private
           secret:
-            secretName: tiup-private
+            secretName: tiup-private-qa
   volumeClaimTemplates:
     - metadata:
-        name: mirror
+        name: tiupserver
       spec:
         accessModes: ["ReadWriteOnce"]
         storageClassName: "local-storage"

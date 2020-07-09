@@ -13,4 +13,6 @@ ENTRYPOINT [ "./bin/tiup-server", "./mirror",\
     "--addr", "0.0.0.0:8989",\ 
     "--index", "./keys/index.json",\
     "--snapshot", "./keys/snapshot.json", \
-    "--timestamp", "./keys/timestamp.json"]
+    "--timestamp", "./keys/timestamp.json",\
+    "--tiuphome", "./upstream",\
+    "--owner", "./mirror/private/private.json"]

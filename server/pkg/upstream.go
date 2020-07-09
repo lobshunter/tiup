@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/pingcap/errors"
@@ -15,6 +16,7 @@ import (
 )
 
 const MAXFSEVENT = 64
+const UPSTREAM_TIMEOUT = 20 * time.Second
 
 type UpstreamCache struct {
 	upstreamHome string
@@ -63,14 +65,23 @@ func (cache *UpstreamCache) updateUpstream() (updated interface{}, err error) {
 		return false, errors.Trace(err)
 	}
 
-	err = watcher.Add(cache.upstreamHome + "/manifests")
-	if err != nil {
+	if err = watcher.Add(cache.upstreamHome + "/manifests"); err != nil {
 		return false, errors.Trace(err)
 	}
 
-	err = cache.tiupEnv.V1Repository().UpdateComponentManifests()
-	if err != nil {
-		return false, errors.Trace(err)
+	errCh := make(chan error)
+	go func() {
+		// FIXME:update manifest could stuck forever, may cause memory & goroutine leak
+		errCh <- cache.tiupEnv.V1Repository().UpdateComponentManifests()
+	}()
+
+	select {
+	case err = <-errCh:
+		if err != nil {
+			return false, errors.Trace(err)
+		}
+	case <-time.After(UPSTREAM_TIMEOUT):
+		return false, errors.New("update upstream timeout")
 	}
 
 	result := UpdateUpstreamResult{
@@ -92,7 +103,5 @@ func (cache *UpstreamCache) updateUpstream() (updated interface{}, err error) {
 		default:
 			return result, nil
 		}
-
-		// time.Sleep(100 * time.Millisecond)
 	}
 }

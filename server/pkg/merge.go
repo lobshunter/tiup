@@ -11,7 +11,7 @@ import (
 const versionSuffix = "qa"
 
 // MergeComponent merge manifest and resign dst
-func MergeComponent(src, dst *model.ComponentManifest, keys ...*v1manifest.KeyInfo) error {
+func MergeComponent(version uint, src, dst *model.ComponentManifest, keys ...*v1manifest.KeyInfo) error {
 	for platformName, platform := range src.Signed.Platforms {
 		if dst.Signed.Platforms[platformName] == nil {
 			dst.Signed.Platforms[platformName] = make(map[string]v1manifest.VersionItem)
@@ -26,7 +26,7 @@ func MergeComponent(src, dst *model.ComponentManifest, keys ...*v1manifest.KeyIn
 		}
 	}
 
-	dst.Signed.Version = max(dst.Signed.Version, src.Signed.Version) + 1
+	dst.Signed.Version = version
 	v1manifest.RenewManifest(&dst.Signed, time.Now())
 
 	var err error
@@ -35,7 +35,7 @@ func MergeComponent(src, dst *model.ComponentManifest, keys ...*v1manifest.KeyIn
 }
 
 // MergeIndex merge manifest and resign dst
-func MergeIndex(src, dst *model.IndexManifest, keys ...*v1manifest.KeyInfo) error {
+func MergeIndex(version uint, src, dst *model.IndexManifest, keys ...*v1manifest.KeyInfo) error {
 	for compName, comp := range src.Signed.Components {
 		if _, ok := dst.Signed.Components[compName]; !ok {
 			dst.Signed.Components[compName] = comp
@@ -55,7 +55,7 @@ func MergeIndex(src, dst *model.IndexManifest, keys ...*v1manifest.KeyInfo) erro
 		}
 	}
 
-	dst.Signed.Version = max(dst.Signed.Version, src.Signed.Version) + 1
+	dst.Signed.Version = version
 	v1manifest.RenewManifest(&dst.Signed, time.Now())
 
 	var err error

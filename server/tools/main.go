@@ -1,10 +1,7 @@
 package main
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -13,10 +10,9 @@ import (
 	"github.com/pingcap/tiup/pkg/repository/crypto"
 	"github.com/pingcap/tiup/pkg/repository/v1manifest"
 	"github.com/pingcap/tiup/server/model"
+	"github.com/pingcap/tiup/server/tools/pkg"
 	"github.com/spf13/cobra"
 )
-
-const DEFAULT_FILE_MODE = 0644
 
 func main() {
 	cmd := &cobra.Command{
@@ -100,7 +96,7 @@ func extractPubKey(privateFile string, outFile string) error {
 		return err
 	}
 
-	return ioutil.WriteFile(outFile, data, DEFAULT_FILE_MODE)
+	return ioutil.WriteFile(outFile, data, pkg.DEFAULT_FILE_MODE)
 }
 
 func newAddOwnerKeyCmd() *cobra.Command {
@@ -121,17 +117,17 @@ func newAddOwnerKeyCmd() *cobra.Command {
 
 			var err error
 			keys := make(map[string]*v1manifest.KeyInfo)
-			if keys[v1manifest.ManifestFilenameIndex], err = model.LoadPrivateKey(indexKey); err != nil {
+			if keys[v1manifest.ManifestTypeIndex], err = model.LoadPrivateKey(indexKey); err != nil {
 				return err
 			}
-			if keys[v1manifest.ManifestFilenameSnapshot], err = model.LoadPrivateKey(snapshotKey); err != nil {
+			if keys[v1manifest.ManifestTypeSnapshot], err = model.LoadPrivateKey(snapshotKey); err != nil {
 				return err
 			}
-			if keys[v1manifest.ManifestFilenameTimestamp], err = model.LoadPrivateKey(timestampKey); err != nil {
+			if keys[v1manifest.ManifestTypeTimestamp], err = model.LoadPrivateKey(timestampKey); err != nil {
 				return err
 			}
 
-			return addOwnerKey(owner, pubKey, index, snapshot, timestamp, keys)
+			return pkg.AddOwnerKey(owner, pubKey, index, snapshot, timestamp, keys)
 		},
 	}
 
@@ -143,125 +139,6 @@ func newAddOwnerKeyCmd() *cobra.Command {
 	cmd.Flags().StringVar(&timestampKey, "timestampKey", "", "specific the private key for timestamp")
 
 	return cmd
-}
-
-func addOwnerKey(owner, publicFile, indexFile, snapshotFile, timestampFile string, keys map[string]*v1manifest.KeyInfo) error {
-	publicData, err := ioutil.ReadFile(publicFile)
-	if err != nil {
-		return err
-	}
-	indexData, err := ioutil.ReadFile(indexFile)
-	if err != nil {
-		return err
-	}
-	snapshotData, err := ioutil.ReadFile(snapshotFile)
-	if err != nil {
-		return err
-	}
-	timestampData, err := ioutil.ReadFile(timestampFile)
-	if err != nil {
-		return err
-	}
-
-	var public v1manifest.KeyInfo
-	var index model.IndexManifest
-	var snapshot model.SnapshotManifest
-	var timestamp model.TimestampManifest
-
-	if err = cjson.Unmarshal(publicData, &public); err != nil {
-		return err
-	}
-	if err = cjson.Unmarshal(indexData, &index); err != nil {
-		return err
-	}
-	if err = cjson.Unmarshal(snapshotData, &snapshot); err != nil {
-		return err
-	}
-	if err = cjson.Unmarshal(timestampData, &timestamp); err != nil {
-		return err
-	}
-
-	id, err := public.ID()
-	if err != nil {
-		return err
-	}
-
-	// update index
-	index.Signed.Owners[owner].Keys[id] = &public
-	index.Signed.Version++
-	index.Signatures, err = model.Sign(index.Signed, keys[v1manifest.ManifestFilenameIndex])
-	if err != nil {
-		return err
-	}
-
-	data, err := cjson.Marshal(index)
-	if err != nil {
-		return err
-	}
-	if err = ioutil.WriteFile(indexFile, data, DEFAULT_FILE_MODE); err != nil {
-		return err
-	}
-
-	// update snapshot
-	indexStat, err := os.Stat(indexFile)
-	if err != nil {
-		return err
-	}
-
-	snapshot.Signed.Meta["/index.json"] = v1manifest.FileVersion{
-		Version: index.Signed.Version,
-		Length:  uint(indexStat.Size()),
-	}
-
-	snapshot.Signatures, err = model.Sign(snapshot.Signed, keys[v1manifest.ManifestFilenameSnapshot])
-	if err != nil {
-		return err
-	}
-
-	data, err = cjson.Marshal(snapshot)
-	if err != nil {
-		return err
-	}
-	if err = ioutil.WriteFile(snapshotFile, data, DEFAULT_FILE_MODE); err != nil {
-		return err
-	}
-
-	// update timestamp
-	snapStat, err := os.Stat(snapshotFile)
-	if err != nil {
-		return err
-	}
-
-	snap, err := os.Open(snapshotFile)
-	if err != nil {
-		return err
-	}
-	defer snap.Close()
-
-	h := sha256.New()
-	if _, err = io.Copy(h, snap); err != nil {
-		return err
-	}
-	timestamp.Signed.Version++
-	timestamp.Signed.Meta["/snapshot.json"] = v1manifest.FileHash{
-		Hashes: map[string]string{
-			v1manifest.SHA256: hex.EncodeToString(h.Sum(nil)),
-		},
-		Length: uint(snapStat.Size()),
-	}
-	timestamp.Signatures, err = model.Sign(timestamp.Signed, keys[v1manifest.ManifestFilenameTimestamp])
-	if err != nil {
-		return err
-	}
-	data, err = cjson.Marshal(timestamp)
-	if err != nil {
-		return err
-	}
-	if err = ioutil.WriteFile(timestampFile, data, DEFAULT_FILE_MODE); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func newJsonCmd() *cobra.Command {
@@ -305,5 +182,5 @@ func canonify(inFile string, outFile string) error {
 		return err
 	}
 
-	return ioutil.WriteFile(outFile, canonified, DEFAULT_FILE_MODE)
+	return ioutil.WriteFile(outFile, canonified, pkg.DEFAULT_FILE_MODE)
 }
