@@ -1,7 +1,6 @@
 FROM alpine:latest
 
-RUN mkdir -p /home/tiupserver \
-    mkdir -p /home/tiupserver/mirror
+RUN mkdir -p /home/tiupserver/mirror/upstream
 
 WORKDIR /home/tiupserver
 
@@ -14,5 +13,6 @@ ENTRYPOINT [ "./bin/tiup-server", "./mirror",\
     "--index", "./keys/index.json",\
     "--snapshot", "./keys/snapshot.json", \
     "--timestamp", "./keys/timestamp.json",\
-    "--tiuphome", "./upstream",\
-    "--owner", "./mirror/private/private.json"]
+    "--tiuphome", "./mirror/upstream",\
+    "--owner", "./mirror/private/private.json",\
+    "--ownerpub", "./mirror/private/public.json"]
