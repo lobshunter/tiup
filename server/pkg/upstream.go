@@ -16,7 +16,7 @@ import (
 )
 
 const MAXFSEVENT = 64
-const UPSTREAM_TIMEOUT = 20 * time.Second
+const UPSTREAM_TIMEOUT = 60 * time.Second
 
 type UpstreamCache struct {
 	upstreamHome string
@@ -29,19 +29,19 @@ type UpdateUpstreamResult struct {
 	Changedfile map[string][]byte
 }
 
-func NewUpstreamCache(upstreamHome string) *UpstreamCache {
+func NewUpstreamCache(upstreamHome string) (*UpstreamCache, error) {
 	os.Setenv(localdata.EnvNameHome, upstreamHome)
 	repoOpts := repository.Options{SkipVersionCheck: true, GOOS: runtime.GOOS, GOARCH: runtime.GOARCH}
 	env, err := environment.InitEnv(repoOpts)
 	if err != nil {
-		return nil
+		return nil, errors.Trace(err)
 	}
 
 	return &UpstreamCache{
 		upstreamHome: upstreamHome,
 		tiupEnv:      env,
 		single:       &singleflight.Group{},
-	}
+	}, nil
 }
 
 func (cache *UpstreamCache) UpdateUpstream() (updated UpdateUpstreamResult, err error) {
@@ -63,6 +63,15 @@ func (cache *UpstreamCache) updateUpstream() (updated interface{}, err error) {
 	watcher.Events = make(chan fsnotify.Event, MAXFSEVENT) // prevent lost event, poor approach
 	if err != nil {
 		return false, errors.Trace(err)
+	}
+
+	if _, err := os.Stat(cache.upstreamHome + "/manifests"); err != nil {
+		if os.IsNotExist(err) {
+			// FIXME: hardcoding filemode
+			if err = os.Mkdir(cache.upstreamHome+"/manifests", 0751); err != nil {
+				return false, errors.Trace(err)
+			}
+		}
 	}
 
 	if err = watcher.Add(cache.upstreamHome + "/manifests"); err != nil {

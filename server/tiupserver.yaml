@@ -37,6 +37,10 @@ spec:
           ports:
             - containerPort: 8989
           volumeMounts:
+            - name: root
+              mountPath: /home/tiupserver/upstream/bin
+            - name: upstream
+              mountPath: /home/tiupserver/upstream
             - name: tiupserver
               mountPath: /home/tiupserver/mirror
             - name: keys
@@ -44,6 +48,9 @@ spec:
             - name: private
               mountPath: /home/tiupserver/mirror/private
       volumes:
+        - name: root.json
+          configMap:
+            name: tiup-root.json
         - name: keys
           secret:
             secretName: tiup-secret
@@ -59,3 +66,11 @@ spec:
         resources:
           requests:
             storage: 50Gi
+    - metadata:
+        name: upstream
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: "local-storage"
+        resources:
+          requests:
+            storage: 1Gi

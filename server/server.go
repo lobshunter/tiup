@@ -42,7 +42,10 @@ type server struct {
 // NewServer returns a pointer to server
 func newServer(rootDir, upstream, upstreamHome, indexKey, snapshotKey, timestampKey, ownerKey, ownerPubKey string) (*server, error) {
 	upstreamHome = strings.TrimSuffix(upstreamHome, "/")
-	upstreamCache := pkg.NewUpstreamCache(upstreamHome)
+	upstreamCache, err := pkg.NewUpstreamCache(upstreamHome)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 
 	s := &server{
 		root:          rootDir,
@@ -62,7 +65,7 @@ func newServer(rootDir, upstream, upstreamHome, indexKey, snapshotKey, timestamp
 	for ty, kfile := range kmap {
 		k, err := model.LoadPrivateKey(kfile)
 		if err != nil {
-			return nil, err
+			return nil, errors.Trace(err)
 		}
 		s.keys[ty] = k
 	}

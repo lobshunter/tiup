@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/juju/errors"
 	"github.com/pingcap/tiup/pkg/logger/log"
 	"github.com/spf13/cobra"
 )
@@ -41,7 +42,7 @@ func main() {
 
 			s, err := newServer(args[0], upstream, tiupHome, indexKey, snapshotKey, timestampKey, ownerKey, ownerPubKey)
 			if err != nil {
-				return err
+				return errors.Trace(err)
 			}
 
 			return s.run(addr)
