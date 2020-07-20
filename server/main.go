@@ -17,7 +17,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/juju/errors"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiup/pkg/logger/log"
 	"github.com/spf13/cobra"
 )

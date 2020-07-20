@@ -20,7 +20,7 @@ import (
 	"time"
 
 	cjson "github.com/gibson042/canonicaljson-go"
-	"github.com/juju/errors"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiup/pkg/logger/log"
 	"github.com/pingcap/tiup/pkg/repository/v1manifest"
 	"github.com/pingcap/tiup/pkg/utils"
