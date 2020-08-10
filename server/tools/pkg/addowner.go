@@ -57,7 +57,7 @@ func AddOwnerKey(owner, publicFile, indexFile, snapshotFile, timestampFile strin
 
 	// update index
 	index.Signed.Owners[owner].Keys[id] = &public
-	index.Signed.Version++
+	// index.Signed.Version++
 	index.Signatures, err = model.Sign(index.Signed, keys[v1manifest.ManifestTypeIndex])
 	if err != nil {
 		return err

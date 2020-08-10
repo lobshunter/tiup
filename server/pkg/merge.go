@@ -77,10 +77,3 @@ func MergeSnapshot(src, dst *model.SnapshotManifest, keys ...*v1manifest.KeyInfo
 	dst.Signatures, err = model.Sign(dst.Signed, keys...)
 	return err
 }
-
-func max(a, b uint) uint {
-	if a > b {
-		return a
-	}
-	return b
-}

@@ -110,6 +110,8 @@ func (s *server) mergeUpstream() (err error) {
 
 			err = txn.ReadLocalManifest(fmt.Sprintf("%d.index.json", indexVersion), &localIndex)
 			if os.IsNotExist(err) {
+				remoteIndex.Signed.Version = indexVersion + 1
+				// code can only reach here at startup, otherwise is a fatal error
 				// no local index, no need to merge
 			} else if err != nil {
 				return errors.Trace(err)
@@ -133,6 +135,7 @@ func (s *server) mergeUpstream() (err error) {
 			// merge component manifest
 			delete(result.Changedfile, v1manifest.ManifestFilenameRoot)
 			delete(result.Changedfile, v1manifest.ManifestFilenameTimestamp)
+			delete(result.Changedfile, v1manifest.ManifestFilenameSnapshot)
 			delete(result.Changedfile, v1manifest.ManifestFilenameIndex)
 			for fileName, content := range result.Changedfile {
 				var remoteComp, localComp model.ComponentManifest

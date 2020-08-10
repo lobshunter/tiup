@@ -34,6 +34,7 @@ import (
 
 // ErrNotFound represents the resource not exists.
 var ErrNotFound = stderrors.New("not found")
+var myclient = grab.NewClient()
 
 type (
 	// DownloadProgress represents the download progress notifier
@@ -175,7 +176,6 @@ func (l *httpMirror) download(url string, to string, maxSize int64) (io.ReadClos
 		verbose.Log("Download resource %s in %s", url, time.Since(start))
 	}(time.Now())
 
-	client := grab.NewClient()
 	req, err := grab.NewRequest(to, url)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -184,7 +184,7 @@ func (l *httpMirror) download(url string, to string, maxSize int64) (io.ReadClos
 		req.NoStore = true
 	}
 
-	resp := client.Do(req)
+	resp := myclient.Do(req)
 
 	// start progress output loop
 	t := time.NewTicker(time.Millisecond)
