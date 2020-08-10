@@ -110,7 +110,10 @@ func (s *server) mergeUpstream() (err error) {
 
 			err = txn.ReadLocalManifest(fmt.Sprintf("%d.index.json", indexVersion), &localIndex)
 			if os.IsNotExist(err) {
-				remoteIndex.Signed.Version = indexVersion + 1
+				err = pkg.MergeIndex(indexVersion+1, &remoteIndex, &remoteIndex, s.keys[v1manifest.ManifestTypeIndex])
+				if err != nil {
+					return errors.Trace(err)
+				}
 				// code can only reach here at startup, otherwise is a fatal error
 				// no local index, no need to merge
 			} else if err != nil {
@@ -147,6 +150,10 @@ func (s *server) mergeUpstream() (err error) {
 
 				err = txn.ReadLocalManifest(fmt.Sprintf("%d.%s", compVersion, fileName), &localComp)
 				if os.IsNotExist(err) {
+					err = pkg.MergeComponent(compVersion+1, &remoteComp, &remoteComp, s.keys[model.Owner])
+					if err != nil {
+						return errors.Trace(err)
+					}
 					// no need to merge
 				} else if err != nil {
 					return errors.Trace(err)

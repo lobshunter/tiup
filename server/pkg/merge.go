@@ -1,14 +1,11 @@
 package pkg
 
 import (
-	"strings"
 	"time"
 
 	"github.com/pingcap/tiup/pkg/repository/v1manifest"
 	"github.com/pingcap/tiup/server/model"
 )
-
-const versionSuffix = "qa"
 
 // MergeComponent merge manifest and resign dst
 func MergeComponent(version uint, src, dst *model.ComponentManifest, keys ...*v1manifest.KeyInfo) error {
@@ -19,8 +16,7 @@ func MergeComponent(version uint, src, dst *model.ComponentManifest, keys ...*v1
 		for version, versionItem := range platform {
 			// if dst doesn't have the version, or the version contains special prefix
 			// use Item in src
-			if _, ok := dst.Signed.Platforms[platformName][version]; (!ok) ||
-				strings.HasPrefix(version, versionSuffix) {
+			if _, ok := dst.Signed.Platforms[platformName][version]; !ok {
 				dst.Signed.Platforms[platformName][version] = versionItem
 			}
 		}
