@@ -11,11 +11,12 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiup/pkg/environment"
 	"github.com/pingcap/tiup/pkg/localdata"
+	"github.com/pingcap/tiup/pkg/logger/log"
 	"github.com/pingcap/tiup/pkg/repository"
 	"golang.org/x/sync/singleflight"
 )
 
-const MAXFSEVENT = 64
+const MAXFSEVENT = 512
 const UPSTREAM_TIMEOUT = 60 * time.Second
 
 type UpstreamCache struct {
@@ -51,19 +52,21 @@ func (cache *UpstreamCache) UpdateUpstream() (updated UpdateUpstreamResult, err 
 	}
 	updated = result.(UpdateUpstreamResult)
 
-	Debug("---- updated: %v", updated.Updated)
+	log.Infof("---- updated: %v", updated.Updated)
 	for filename := range updated.Changedfile {
-		Debug("---file: %s\n", filename)
+		log.Infof("---file: %s\n", filename)
 	}
 	return updated, nil
 }
 
 func (cache *UpstreamCache) updateUpstream() (updated interface{}, err error) {
 	watcher, err := fsnotify.NewWatcher()
-	watcher.Events = make(chan fsnotify.Event, MAXFSEVENT) // prevent lost event, poor approach
 	if err != nil {
 		return false, errors.Trace(err)
 	}
+
+	defer watcher.Close()
+	watcher.Events = make(chan fsnotify.Event, MAXFSEVENT) // prevent lost event, poor approach
 
 	if _, err := os.Stat(cache.upstreamHome + "/manifests"); err != nil {
 		if os.IsNotExist(err) {
@@ -80,7 +83,6 @@ func (cache *UpstreamCache) updateUpstream() (updated interface{}, err error) {
 
 	errCh := make(chan error)
 	go func() {
-		// FIXME:update manifest could stuck forever, may cause memory & goroutine leak
 		errCh <- cache.tiupEnv.V1Repository().UpdateComponentManifests()
 	}()
 
@@ -100,13 +102,12 @@ func (cache *UpstreamCache) updateUpstream() (updated interface{}, err error) {
 	for {
 		select {
 		case event := <-watcher.Events:
-			println("------- capacity of channel", cap(watcher.Events))
 			data, err := ioutil.ReadFile(event.Name)
 			if err != nil {
 				return result, errors.Trace(err)
 			}
 
-			Debug("changed %s\n", filepath.Base(event.Name))
+			log.Infof("changed %s\n", filepath.Base(event.Name))
 			result.Changedfile[filepath.Base(event.Name)] = data
 			result.Updated = true
 		default:

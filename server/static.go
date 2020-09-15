@@ -39,9 +39,9 @@ func (s *server) staticServer(local string, upstream string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// NOTE: hardcoding here, only call updateUpstream when downloading timestamp
 		if r.URL.Path == "timestamp.json" {
-			pkg.Debug("----getting timestamp----")
+			log.Infof("----getting timestamp----")
 			if err := s.mergeUpstream(); err != nil {
-				log.Warnf("mergeUpstream error: %v", err)
+				log.Errorf("mergeUpstream error: %v", err)
 			}
 		}
 
@@ -67,7 +67,7 @@ func (s *server) mergeUpstream() (err error) {
 	}
 
 	if result.Updated {
-		pkg.Debug("----upstream updated----")
+		log.Infof("----upstream updated----")
 		uuid := uuid.New().String()
 		err = s.sm.Begin(uuid)
 		if err != nil {
@@ -183,10 +183,12 @@ func (s *server) mergeUpstream() (err error) {
 				return errors.Trace(err)
 			}
 
-			pkg.Debug("----- commiting")
+			log.Infof("-----commiting")
 			return txn.Commit()
 		}
 	}
+
+	log.Infof("mergeUpstream succeeded")
 	return nil
 }
 

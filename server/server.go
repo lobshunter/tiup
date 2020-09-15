@@ -23,6 +23,7 @@ import (
 
 	cjson "github.com/gibson042/canonicaljson-go"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiup/pkg/logger/log"
 	"github.com/pingcap/tiup/pkg/repository/v1manifest"
 	"github.com/pingcap/tiup/server/model"
 	"github.com/pingcap/tiup/server/pkg"
@@ -104,6 +105,6 @@ func (s *server) ensureOwnerKey(ownerId string, publicFile string) error {
 }
 
 func (s *server) run(addr string) error {
-	fmt.Println(addr)
+	log.Infof(addr)
 	return http.ListenAndServe(addr, s.router())
 }
