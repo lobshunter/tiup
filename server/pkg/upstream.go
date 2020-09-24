@@ -7,7 +7,6 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/fsnotify/fsnotify"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiup/pkg/environment"
 	"github.com/pingcap/tiup/pkg/localdata"
@@ -20,14 +19,10 @@ const MAXFSEVENT = 512
 const UPSTREAM_TIMEOUT = 60 * time.Second
 
 type UpstreamCache struct {
-	upstreamHome string
 	tiupEnv      *environment.Environment
-	single       *singleflight.Group
-}
-
-type UpdateUpstreamResult struct {
-	Updated     bool
-	Changedfile map[string][]byte
+	ManifestsDir string
+	Single       *singleflight.Group
+	MTimeCache   map[string]time.Time
 }
 
 func NewUpstreamCache(upstreamHome string) (*UpstreamCache, error) {
@@ -39,79 +34,82 @@ func NewUpstreamCache(upstreamHome string) (*UpstreamCache, error) {
 	}
 
 	return &UpstreamCache{
-		upstreamHome: upstreamHome,
+		ManifestsDir: upstreamHome + "/manifests",
 		tiupEnv:      env,
-		single:       &singleflight.Group{},
+		Single:       &singleflight.Group{},
+		MTimeCache:   make(map[string]time.Time),
 	}, nil
 }
 
-func (cache *UpstreamCache) UpdateUpstream() (updated UpdateUpstreamResult, err error) {
-	result, err, _ := cache.single.Do("updateUpstream", cache.updateUpstream)
-	if err != nil {
-		return UpdateUpstreamResult{Updated: false}, errors.Trace(err)
-	}
-	updated = result.(UpdateUpstreamResult)
+func (cache *UpstreamCache) UpdateUpstream() (updatedFiles map[string][]byte, err error) {
+	updatedFiles = make(map[string][]byte)
 
-	log.Infof("---- updated: %v", updated.Updated)
-	for filename := range updated.Changedfile {
-		log.Infof("---file: %s\n", filename)
-	}
-	return updated, nil
-}
-
-func (cache *UpstreamCache) updateUpstream() (updated interface{}, err error) {
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		return false, errors.Trace(err)
-	}
-
-	defer watcher.Close()
-	watcher.Events = make(chan fsnotify.Event, MAXFSEVENT) // prevent lost event, poor approach
-
-	if _, err := os.Stat(cache.upstreamHome + "/manifests"); err != nil {
+	// make sure rootDir exists
+	if _, err := os.Stat(cache.ManifestsDir); err != nil {
 		if os.IsNotExist(err) {
-			// FIXME: hardcoding filemode
-			if err = os.Mkdir(cache.upstreamHome+"/manifests", 0751); err != nil {
-				return false, errors.Trace(err)
+			// HARDCODE: hardcoded file mode here
+			if err = os.Mkdir(cache.ManifestsDir, 0751); err != nil {
+				return nil, errors.Trace(err)
 			}
 		}
 	}
 
-	if err = watcher.Add(cache.upstreamHome + "/manifests"); err != nil {
-		return false, errors.Trace(err)
-	}
-
+	// call tiup list to udpate manifests
 	errCh := make(chan error)
 	go func() {
+		// UpdateComponentManifests could block for a very longtime
+		// duration depends the underlying TCP stack, technically this won't cause memory leak
+		// using channel here is to prevent function from blocking the main thread
 		errCh <- cache.tiupEnv.V1Repository().UpdateComponentManifests()
 	}()
 
 	select {
 	case err = <-errCh:
 		if err != nil {
-			return false, errors.Trace(err)
+			return nil, errors.Trace(err)
 		}
+
 	case <-time.After(UPSTREAM_TIMEOUT):
-		return false, errors.New("update upstream timeout")
+		return nil, errors.New("get upstream manifests timeout")
 	}
 
-	result := UpdateUpstreamResult{
-		Changedfile: make(map[string][]byte),
-	}
+	// get updated manifests files
+	err = filepath.Walk(cache.ManifestsDir, func(path string, info os.FileInfo, err error) error {
+		if path == cache.ManifestsDir {
+			return nil
+		}
 
-	for {
-		select {
-		case event := <-watcher.Events:
-			data, err := ioutil.ReadFile(event.Name)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		if cache.MTimeCache[info.Name()] != info.ModTime() { // file modified
+			log.Debugf("ReadFile: %s", cache.ManifestsDir+"/"+info.Name())
+			data, err := ioutil.ReadFile(cache.ManifestsDir + "/" + info.Name())
 			if err != nil {
-				return result, errors.Trace(err)
+				return errors.Trace(err)
 			}
 
-			log.Infof("changed %s\n", filepath.Base(event.Name))
-			result.Changedfile[filepath.Base(event.Name)] = data
-			result.Updated = true
-		default:
-			return result, nil
+			updatedFiles[info.Name()] = data
 		}
-	}
+
+		return nil
+	})
+
+	return updatedFiles, err
+}
+
+func (cache *UpstreamCache) UpdateCacheMTime() error {
+	return filepath.Walk(cache.ManifestsDir, func(path string, info os.FileInfo, err error) error {
+		if path == cache.ManifestsDir {
+			return nil
+		}
+
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		cache.MTimeCache[info.Name()] = info.ModTime()
+		return nil
+	})
 }
