@@ -6,7 +6,7 @@ RUN mkdir -p /home/tiupserver/mirror \
     mkdir -p /home/tiupserver/upstream/bin \
     mkdir -p /home/tiupserver/upstream/manifests
 
-# ENV TIUP_VERBOSE=enable
+ENV TIUP_VERBOSE=enable
 WORKDIR /home/tiupserver
 
 # COPY tools/root.json upstream/bin/root.json

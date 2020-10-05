@@ -66,6 +66,8 @@ func (s *server) staticServer(local string, upstream string) http.Handler {
 
 // mergeUpstream merge upstream manifests update to local manifests
 func (s *server) mergeUpstream() (err error) {
+	log.Infof("call mergeUpstream")
+
 	updatedFiles, err := s.upstreamCache.UpdateUpstream()
 	if err != nil {
 		return errors.Trace(err)
