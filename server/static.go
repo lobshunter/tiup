@@ -68,6 +68,12 @@ func (s *server) staticServer(local string, upstream string) http.Handler {
 func (s *server) mergeUpstream() (err error) {
 	log.Infof("call mergeUpstream")
 
+	defer func() {
+		if err != nil {
+			log.Errorf("mergeUpstream error stack: { %s\n}", errors.ErrorStack(err))
+		}
+	}()
+
 	updatedFiles, err := s.upstreamCache.UpdateUpstream()
 	if err != nil {
 		return errors.Trace(err)
