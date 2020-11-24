@@ -111,39 +111,43 @@ func (s *server) mergeUpstream() (err error) {
 		}
 
 		// merge index
-		var localIndex, remoteIndex model.IndexManifest
-		indexVersion := localSnapshot.Signed.Meta["/index.json"].Version
+		// sometimes index is not updated along with snapshot and timestamp
+		if indexData, needMergeIndex := updatedFiles[v1manifest.ManifestFilenameIndex]; needMergeIndex {
+			var localIndex, remoteIndex model.IndexManifest
+			indexVersion := localSnapshot.Signed.Meta["/index.json"].Version
 
-		if err = cjson.Unmarshal(updatedFiles[v1manifest.ManifestFilenameIndex], &remoteIndex); err != nil {
-			return errors.Trace(err)
-		}
+			if err = cjson.Unmarshal(indexData, &remoteIndex); err != nil {
+				return errors.Trace(err)
+			}
 
-		err = txn.ReadLocalManifest(fmt.Sprintf("%d.index.json", indexVersion), &localIndex)
-		if os.IsNotExist(err) {
-			err = pkg.MergeIndex(indexVersion+1, &remoteIndex, &remoteIndex, s.keys[v1manifest.ManifestTypeIndex])
+			err = txn.ReadLocalManifest(fmt.Sprintf("%d.index.json", indexVersion), &localIndex)
+			if os.IsNotExist(err) {
+				err = pkg.MergeIndex(indexVersion+1, &remoteIndex, &remoteIndex, s.keys[v1manifest.ManifestTypeIndex])
+				if err != nil {
+					return errors.Trace(err)
+				}
+				// code can only reach here at startup, otherwise is a fatal error
+				// no local index, no need to merge
+			} else if err != nil {
+				return errors.Trace(err)
+			} else {
+				err = pkg.MergeIndex(indexVersion+1, &localIndex, &remoteIndex, s.keys[v1manifest.ManifestTypeIndex])
+				if err != nil {
+					return errors.Trace(err)
+				}
+			}
+
+			if err = txn.WriteManifest(fmt.Sprintf("%d.index.json", indexVersion+1), &remoteIndex); err != nil {
+				return errors.Trace(err)
+			}
+
+			// update index stat in snapshot too
+			indexStat, err := txn.Stat(fmt.Sprintf("%d.index.json", indexVersion+1))
 			if err != nil {
 				return errors.Trace(err)
 			}
-			// code can only reach here at startup, otherwise is a fatal error
-			// no local index, no need to merge
-		} else if err != nil {
-			return errors.Trace(err)
-		} else {
-			err = pkg.MergeIndex(indexVersion+1, &localIndex, &remoteIndex, s.keys[v1manifest.ManifestTypeIndex])
-			if err != nil {
-				return errors.Trace(err)
-			}
+			localSnapshot.Signed.Meta["/"+v1manifest.ManifestFilenameIndex] = v1manifest.FileVersion{Version: indexVersion + 1, Length: uint(indexStat.Size())}
 		}
-
-		if err = txn.WriteManifest(fmt.Sprintf("%d.index.json", indexVersion+1), &remoteIndex); err != nil {
-			return errors.Trace(err)
-		}
-
-		indexStat, err := txn.Stat(fmt.Sprintf("%d.index.json", indexVersion+1))
-		if err != nil {
-			return errors.Trace(err)
-		}
-		localSnapshot.Signed.Meta["/"+v1manifest.ManifestFilenameIndex] = v1manifest.FileVersion{Version: indexVersion + 1, Length: uint(indexStat.Size())}
 
 		// merge component manifest
 		delete(updatedFiles, v1manifest.ManifestFilenameRoot)

@@ -20,7 +20,19 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiup/pkg/logger/log"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
+
+func init() {
+	encoderCfg := zap.NewProductionEncoderConfig()
+	encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
+	encoder := zapcore.NewJSONEncoder(encoderCfg)
+
+	core := zapcore.NewCore(encoder, os.Stdout, zap.DebugLevel)
+	logger := zap.New(core)
+	zap.ReplaceGlobals(logger)
+}
 
 func main() {
 	addr := "0.0.0.0:8989"
