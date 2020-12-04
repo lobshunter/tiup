@@ -14,7 +14,6 @@
 package store
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -26,6 +25,8 @@ import (
 
 	cjson "github.com/gibson042/canonicaljson-go"
 	"github.com/google/uuid"
+	"github.com/juju/errors"
+
 	"github.com/pingcap/tiup/pkg/logger/log"
 	"github.com/pingcap/tiup/pkg/utils"
 )
@@ -263,7 +264,8 @@ func (t *qcloudTxn) Commit() error {
 func (t *qcloudTxn) checkConflict() error {
 	for file := range t.accessed {
 		if t.store.last(file) != nil && t.store.last(file).After(*t.first(file)) {
-			return ErrorFsCommitConflict
+			return errors.Annotatef(ErrorFsCommitConflict,
+				"[%s] conflict, t.store.last: [%v], t.first(file): [%v]", file, t.store.last(file), t.first(file))
 		}
 	}
 	return nil

@@ -20,6 +20,7 @@ import (
 
 	cjson "github.com/gibson042/canonicaljson-go"
 	"github.com/gorilla/mux"
+	"github.com/juju/errors"
 	"github.com/pingcap/fn"
 	"github.com/pingcap/tiup/pkg/logger/log"
 	"github.com/pingcap/tiup/pkg/repository/v1manifest"
@@ -122,8 +123,8 @@ func (h *componentSigner) sign(r *http.Request, m *model.ComponentManifest) (sr 
 		}
 		return txn.Commit()
 	}, func(err error) bool {
-		log.Infof("Sign error: %s", err.Error())
-		return err == store.ErrorFsCommitConflict && txn.ResetManifest() == nil
+		log.Infof("Sign error: %s", errors.ErrorStack(err))
+		return errors.Cause(err) == store.ErrorFsCommitConflict && txn.ResetManifest() == nil
 	}); err != nil {
 		log.Errorf("Sign component failed: %s", err.Error())
 		if err, ok := err.(statusError); ok {
