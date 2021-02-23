@@ -20,6 +20,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"strings"
 	"time"
 
 	cjson "github.com/gibson042/canonicaljson-go"
@@ -110,6 +111,18 @@ func (s *server) mergeUpstream() (err error) {
 			return errors.Trace(err)
 		}
 
+		// incase root manifest rotates
+		_, err = txn.Stat("root.json")
+		if err != nil {
+			if os.IsNotExist(err) {
+				// not exist means server use root.json of upstream
+				// so it's needed to use metadata of upstream
+				localSnapshot.Signed.Meta["/root.json"] = remoteSnapshot.Signed.Meta["/root.json"]
+			} else {
+				return errors.Trace(err)
+			}
+		}
+
 		// merge index
 		// sometimes index is not updated along with snapshot and timestamp
 		if indexData, needMergeIndex := updatedFiles[v1manifest.ManifestFilenameIndex]; needMergeIndex {
@@ -150,11 +163,15 @@ func (s *server) mergeUpstream() (err error) {
 		}
 
 		// merge component manifest
-		delete(updatedFiles, v1manifest.ManifestFilenameRoot)
 		delete(updatedFiles, v1manifest.ManifestFilenameTimestamp)
 		delete(updatedFiles, v1manifest.ManifestFilenameSnapshot)
 		delete(updatedFiles, v1manifest.ManifestFilenameIndex)
 		for fileName, content := range updatedFiles {
+			if strings.HasSuffix(fileName, v1manifest.ManifestFilenameRoot) {
+				// root file should be handled seperatly
+				continue
+			}
+
 			var remoteComp, localComp model.ComponentManifest
 			compVersion := localSnapshot.Signed.Meta["/"+fileName].Version
 
